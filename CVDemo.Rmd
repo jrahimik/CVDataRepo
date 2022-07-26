@@ -1,0 +1,112 @@
+---
+title: "Cross validation Demo"
+output: html_document
+date: '2022-07-25'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(glmnet)
+```
+
+## Goal
+
+The goal of this demo is to see how exactly cross validation and lasso works. 
+
+
+## Getting the data
+
+Lets Read The data First 
+
+
+```{r}
+
+x <- read.table("geneExpressionData.csv")
+y <- read.table("RA_Phen.csv")
+
+```
+
+##  Partitoning  Kfold data
+
+Lets write a function to partition the data. Here we are partitioning the data into 10 folds.
+
+
+```{r}
+
+
+## Get the values for folds
+GetFoldValue <- function(x,y,nfolds=10,lambdaVal=0.1){
+
+suffle_id <- sample(nrow(x))   ## shuffle the data
+Xs        <- x[suffle_id,]     ## order the x in shuffle order
+Ys        <- y[suffle_id,]      ## order the y in shuffle order
+
+reportFold <- NULL             ## create a matrix to save the fold data
+
+
+folds <- cut(seq(1,nrow(x)),breaks=10,labels=FALSE)  ## create the folds
+  
+for(i in 1:nfolds){                                  
+  
+  testIndexes <- which(folds==i,arr.ind=TRUE)    ## seperate the test data
+  XsTest <- Xs[testIndexes,]                     ## Get the test data for the Xs 
+  YsTest <- Ys[testIndexes]                      ## Get the test data for the Ys
+  
+  XsTrain <- Xs[-testIndexes,]                   ## Get the train data for the Xs 
+  YsTrain <- Ys[-testIndexes]                    ## Get the train data for the Ys
+  
+  
+  model<- glmnet(                           ## for each fold train on train data
+    XsTrain,
+    YsTrain,
+    family = c("gaussian"),
+    alpha = 1,
+    lambda = lambdaVal)
+  
+  YsTesthat  <- predict(model,                 ## Get the predicted values on test data
+                        newx = as.matrix(XsTest),
+                        type="response")
+  
+  res        <- cbind(YsTesthat,YsTest)
+  reportFold <- rbind(reportFold,res)
+  
+  
+  
+}
+
+return(reportFold)
+
+}
+
+
+
+```
+
+## Replication
+
+we are going to repeat the cross validation several times. This will insure that we are not getting anything by chance.
+
+```{r}
+PlotData <- NULL
+lambda_seq <- seq(0,2,0.1)
+
+for(lambdaVal in lambda_seq){
+
+res <- sapply(1:100,function(nothing){res <- GetFoldValue(x,y,nfolds=10,lambdaVal=lambdaVal);
+return(cor(res[,1],res[,2]))})
+
+
+PlotData <- cbind(PlotData,res)
+
+}
+
+
+colnames(PlotData) <- lambda_seq
+boxplot(PlotData,ylab="spearman correlation",xlab=expression(lambda))
+
+
+
+
+
+
+```
